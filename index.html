@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>霓虹雙人貪吃蛇 Cyber Snake</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+        
+        body {
+            background-color: #050510;
+            color: #fff;
+            font-family: 'Orbitron', sans-serif;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.2), 0 0 50px rgba(255, 0, 255, 0.2);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            background: linear-gradient(135deg, #050510 0%, #100b1f 100%);
+        }
+
+        .score-board {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 800px;
+            margin-bottom: 15px;
+            padding: 0 20px;
+        }
+
+        .p1-score { color: #00ffff; text-shadow: 0 0 10px #00ffff; }
+        .p2-score { color: #ff00ff; text-shadow: 0 0 10px #ff00ff; }
+        
+        .panel {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+            z-index: 10;
+        }
+
+        button {
+            background: transparent;
+            color: #fff;
+            border: 2px solid #fff;
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            font-family: 'Orbitron', sans-serif;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+            border-radius: 4px;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.3) inset, 0 0 15px rgba(255, 255, 255, 0.3);
+        }
+
+        button:hover {
+            background: #fff;
+            color: #000;
+            box-shadow: 0 0 25px rgba(255, 255, 255, 0.8) inset, 0 0 25px rgba(255, 255, 255, 0.8);
+        }
+
+        .shake {
+            animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-2px, 2px, 0); }
+            20%, 80% { transform: translate3d(4px, -2px, 0); }
+            30%, 50%, 70% { transform: translate3d(-6px, 4px, 0); }
+            40%, 60% { transform: translate3d(6px, -4px, 0); }
+        }
+        
+        .instructions {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #aaa;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .highlight { color: #fff; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="score-board text-2xl md:text-4xl font-black">
+        <div id="score1" class="p1-score">P1 (WSAD): 0</div>
+        <div id="score2" class="p2-score">P2 (方向鍵): 0</div>
+    </div>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <!-- 初始/結束畫面 -->
+        <div id="ui-panel" class="panel">
+            <h1 id="game-title" class="text-5xl md:text-7xl font-black mb-4 tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-500 drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]">CYBER SNAKE</h1>
+            <h2 id="winner-text" class="text-3xl font-bold mb-4 hidden"></h2>
+            
+            <div class="instructions max-w-lg bg-white/10 p-6 rounded-lg border border-white/20 shadow-lg">
+                <p class="mb-2 text-cyan-300">🟦 玩家一：使用 <span class="highlight">W A S D</span> 移動</p>
+                <p class="mb-4 text-fuchsia-300">🟪 玩家二：使用 <span class="highlight">↑ ↓ ← →</span> 移動</p>
+                <div class="text-left text-sm text-gray-300 leading-relaxed border-t border-gray-600 pt-3">
+                    <p>✨ 遊戲特色：</p>
+                    <ul class="list-disc pl-5 mt-2">
+                        <li>吃掉發光的食物來變長並得分。</li>
+                        <li><span class="text-yellow-400 font-bold">戰鬥技巧：</span>如果你的蛇頭撞到對方的「身體」，對方被撞斷的後半截會變成<span class="text-yellow-400">高分能量方塊</span>！</li>
+                        <li>撞到牆壁、自己的身體、或與對手「頭撞頭」皆會死亡。</li>
+                    </ul>
+                </div>
+            </div>
+
+            <button id="start-btn">系統連線 (START)</button>
+        </div>
+    </div>
+
+<script>
+    /** 遊戲設定與變數 **/
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const uiPanel = document.getElementById('ui-panel');
+    const startBtn = document.getElementById('start-btn');
+    const winnerText = document.getElementById('winner-text');
+    const gameContainer = document.getElementById('game-container');
+    const score1El = document.getElementById('score1');
+    const score2El = document.getElementById('score2');
+
+    const GRID_SIZE = 20;
+    const COLS = canvas.width / GRID_SIZE;
+    const ROWS = canvas.height / GRID_SIZE;
+    const TICK_RATE = 100; // 遊戲邏輯更新頻率 (毫秒)
+
+    let lastTime = 0;
+    let accumulator = 0;
+    let isPlaying = false;
+    let animationId;
+
+    let p1, p2;
+    let foods = [];
+    let particles = [];
+
+    /** 音效引擎 (Web Audio API) **/
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let audioCtx;
+
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new AudioContext();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    }
+
+    function playSound(type) {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        const now = audioCtx.currentTime;
+        
+        if (type === 'eat') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        } else if (type === 'sever') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(400, now);
+            osc.frequency.exponentialRampToValueAtTime(100, now + 0.3);
+            gain.gain.setValueAtTime(0.5, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+            osc.start(now);
+            osc.stop(now + 0.3);
+        } else if (type === 'die') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(150, now);
+            osc.frequency.exponentialRampToValueAtTime(40, now + 0.5);
+            gain.gain.setValueAtTime(0.5, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+            osc.start(now);
+            osc.stop(now + 0.5);
+        }
+    }
+
+    /** 視覺特效引擎 **/
+    function createParticles(x, y, color, count = 10) {
+        for (let i = 0; i < count; i++) {
+            particles.push({
+                x: x * GRID_SIZE + GRID_SIZE / 2,
+                y: y * GRID_SIZE + GRID_SIZE / 2,
+                vx: (Math.random() - 0.5) * 8,
+                vy: (Math.random() - 0.5) * 8,
+                life: 1.0,
+                color: color,
+                size: Math.random() * 4 + 2
+            });
+        }
+    }
+
+    function updateParticles(dt) {
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life -= dt * 0.002;
+            p.size *= 0.95;
+            if (p.life <= 0 || p.size < 0.5) {
+                particles.splice(i, 1);
+            }
+        }
+    }
+
+    function drawParticles() {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        particles.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = Math.max(0, p.life);
+            ctx.fill();
+            
+            // 粒子發光
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = p.color;
+            ctx.fill();
+        });
+        ctx.restore();
+    }
+
+    function triggerShake() {
+        gameContainer.classList.remove('shake');
+        void gameContainer.offsetWidth; // Trigger reflow
+        gameContainer.classList.add('shake');
+    }
+
+    /** 遊戲邏輯 **/
+    function resetGame() {
+        p1 = {
+            id: 'P1',
+            body: [{x: 5, y: ROWS/2}, {x: 4, y: ROWS/2}, {x: 3, y: ROWS/2}, {x: 2, y: ROWS/2}],
+            dir: {x: 1, y: 0},
+            nextDir: {x: 1, y: 0},
+            color: '#00ffff',
+            score: 0,
+            alive: true
+        };
+
+        p2 = {
+            id: 'P2',
+            body: [{x: COLS-6, y: ROWS/2}, {x: COLS-5, y: ROWS/2}, {x: COLS-4, y: ROWS/2}, {x: COLS-3, y: ROWS/2}],
+            dir: {x: -1, y: 0},
+            nextDir: {x: -1, y: 0},
+            color: '#ff00ff',
+            score: 0,
+            alive: true
+        };
+
+        foods = [];
+        particles = [];
+        spawnFood();
+        spawnFood();
+        updateScores();
+    }
+
+    function spawnFood() {
+        let x, y, valid;
+        do {
+            valid = true;
+            x = Math.floor(Math.random() * COLS);
+            y = Math.floor(Math.random() * ROWS);
+            
+            // 確保不會生在蛇身上
+            [...p1.body, ...p2.body].forEach(segment => {
+                if (segment.x === x && segment.y === y) valid = false;
+            });
+        } while (!valid);
+
+        foods.push({ x, y, type: 'normal', value: 10, color: '#00ff00', pulse: 0 });
+    }
+
+    function updateScores() {
+        score1El.textContent = `P1 (WSAD): ${p1.score}`;
+        score2El.textContent = `P2 (方向鍵): ${p2.score}`;
+    }
+
+    function gameOver(reason) {
+        isPlaying = false;
+        playSound('die');
+        triggerShake();
+        
+        uiPanel.style.display = 'flex';
+        winnerText.style.display = 'block';
+        
+        if (!p1.alive && !p2.alive) {
+            winnerText.textContent = "雙方同歸於盡！平手！";
+            winnerText.className = "text-4xl font-bold mb-4 text-yellow-400";
+        } else if (!p1.alive) {
+            winnerText.textContent = "玩家二 (P2) 獲勝！";
+            winnerText.className = "text-4xl font-bold mb-4 text-fuchsia-400 drop-shadow-[0_0_10px_#ff00ff]";
+        } else {
+            winnerText.textContent = "玩家一 (P1) 獲勝！";
+            winnerText.className = "text-4xl font-bold mb-4 text-cyan-400 drop-shadow-[0_0_10px_#00ffff]";
+        }
+        
+        startBtn.textContent = "再次挑戰 (RESTART)";
+    }
+
+    function gameTick() {
+        if (!isPlaying) return;
+
+        // 1. 更新方向
+        p1.dir = p1.nextDir;
+        p2.dir = p2.nextDir;
+
+        // 2. 計算新頭部位置
+        const p1Head = { x: p1.body[0].x + p1.dir.x, y: p1.body[0].y + p1.dir.y };
+        const p2Head = { x: p2.body[0].x + p2.dir.x, y: p2.body[0].y + p2.dir.y };
+
+        p1.body.unshift(p1Head);
+        p2.body.unshift(p2Head);
+
+        // 3. 檢查頭撞頭 (平局/雙殺)
+        if (p1Head.x === p2Head.x && p1Head.y === p2Head.y) {
+            p1.alive = false;
+            p2.alive = false;
+            createParticles(p1Head.x, p1Head.y, '#ffffff', 30);
+            gameOver("頭撞頭！");
+            return;
+        }
+
+        let p1Ate = false;
+        let p2Ate = false;
+
+        // 4. 檢查「斬斷對手」邏輯
+        let p2SeverIdx = -1;
+        for (let i = 1; i < p2.body.length; i++) {
+            if (p1Head.x === p2.body[i].x && p1Head.y === p2.body[i].y) {
+                p2SeverIdx = i; break;
+            }
+        }
+
+        let p1SeverIdx = -1;
+        for (let i = 1; i < p1.body.length; i++) {
+            if (p2Head.x === p1.body[i].x && p2Head.y === p1.body[i].y) {
+                p1SeverIdx = i; break;
+            }
+        }
+
+        // 執行斬斷
+        if (p2SeverIdx > -1) applySever(p2, p2SeverIdx);
+        if (p1SeverIdx > -1) applySever(p1, p1SeverIdx);
+
+        // 5. 檢查吃食物 (包含剛掉落的能量)
+        foods = foods.filter(food => {
+            let eaten = false;
+            if (p1Head.x === food.x && p1Head.y === food.y) {
+                p1Ate = true;
+                p1.score += food.value;
+                eaten = true;
+                playSound('eat');
+                createParticles(food.x, food.y, p1.color, 5);
+            } else if (p2Head.x === food.x && p2Head.y === food.y) {
+                p2Ate = true;
+                p2.score += food.value;
+                eaten = true;
+                playSound('eat');
+                createParticles(food.x, food.y, p2.color, 5);
+            }
+            return !eaten;
+        });
+
+        // 沒吃到東西就縮尾巴
+        if (!p1Ate) p1.body.pop();
+        if (!p2Ate) p2.body.pop();
+
+        updateScores();
+
+        // 6. 檢查撞牆與自撞
+        if (checkWall(p1Head) || checkSelf(p1)) p1.alive = false;
+        if (checkWall(p2Head) || checkSelf(p2)) p2.alive = false;
+
+        if (!p1.alive || !p2.alive) {
+            gameOver();
+            return;
+        }
+
+        // 7. 隨機補充普通食物
+        const normalFoods = foods.filter(f => f.type === 'normal').length;
+        if (normalFoods < 2 && Math.random() < 0.1) {
+            spawnFood();
+        }
+    }
+
+    function applySever(victim, index) {
+        // 從 index 開始截斷
+        const droppedParts = victim.body.splice(index);
+        
+        // 將截斷的部分變成高分能量 (黃色)
+        droppedParts.forEach(part => {
+            foods.push({
+                x: part.x, 
+                y: part.y, 
+                type: 'energy', 
+                value: 20, 
+                color: '#ffff00',
+                pulse: Math.random() * Math.PI
+            });
+        });
+
+        playSound('sever');
+        triggerShake();
+        createParticles(droppedParts[0].x, droppedParts[0].y, '#ffff00', 20);
+    }
+
+    function checkWall(head) {
+        return head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS;
+    }
+
+    function checkSelf(player) {
+        const head = player.body[0];
+        // 索引 0 是頭部，從 1 開始檢查
+        for (let i = 1; i < player.body.length; i++) {
+            if (head.x === player.body[i].x && head.y === player.body[i].y) return true;
+        }
+        return false;
+    }
+
+    /** 繪圖邏輯 **/
+    function draw() {
+        // 清除畫布，帶有拖尾殘影效果
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = 'rgba(5, 5, 16, 0.3)'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 畫格線 (暗色)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for(let x=0; x<=canvas.width; x+=GRID_SIZE) { ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); }
+        for(let y=0; y<=canvas.height; y+=GRID_SIZE) { ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); }
+        ctx.stroke();
+
+        ctx.globalCompositeOperation = 'lighter';
+
+        // 畫食物
+        foods.forEach(food => {
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = food.color;
+            ctx.fillStyle = food.color;
+            
+            let sizeOffset = 0;
+            if (food.type === 'energy') {
+                food.pulse += 0.1;
+                sizeOffset = Math.sin(food.pulse) * 3; // 能量方塊會脈動
+            }
+
+            ctx.fillRect(
+                food.x * GRID_SIZE + 2 - sizeOffset/2, 
+                food.y * GRID_SIZE + 2 - sizeOffset/2, 
+                GRID_SIZE - 4 + sizeOffset, 
+                GRID_SIZE - 4 + sizeOffset
+            );
+        });
+
+        // 畫蛇
+        [p1, p2].forEach(p => {
+            if (!p || !p.alive) return;
+            
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = p.color;
+            ctx.fillStyle = p.color;
+
+            p.body.forEach((segment, index) => {
+                // 頭部比較亮/大
+                if (index === 0) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.shadowBlur = 20;
+                } else {
+                    ctx.fillStyle = p.color;
+                    ctx.shadowBlur = 10;
+                    // 身體後段稍微透明
+                    ctx.globalAlpha = Math.max(0.3, 1 - (index / p.body.length)); 
+                }
+
+                ctx.fillRect(
+                    segment.x * GRID_SIZE + 1, 
+                    segment.y * GRID_SIZE + 1, 
+                    GRID_SIZE - 2, 
+                    GRID_SIZE - 2
+                );
+            });
+            ctx.globalAlpha = 1.0;
+        });
+
+        drawParticles();
+    }
+
+    /** 主迴圈 **/
+    function gameLoop(timestamp) {
+        if (!lastTime) lastTime = timestamp;
+        const dt = timestamp - lastTime;
+        lastTime = timestamp;
+
+        if (isPlaying) {
+            accumulator += dt;
+            while (accumulator >= TICK_RATE) {
+                gameTick();
+                accumulator -= TICK_RATE;
+            }
+        }
+
+        updateParticles(dt);
+        draw();
+
+        animationId = requestAnimationFrame(gameLoop);
+    }
+
+    /** 控制輸入 **/
+    window.addEventListener('keydown', e => {
+        if (!isPlaying) return;
+
+        // P1 控制 (WSAD) - 防止 180 度反轉
+        if ((e.key === 'w' || e.key === 'W') && p1.dir.y === 0) p1.nextDir = {x: 0, y: -1};
+        if ((e.key === 's' || e.key === 'S') && p1.dir.y === 0) p1.nextDir = {x: 0, y: 1};
+        if ((e.key === 'a' || e.key === 'A') && p1.dir.x === 0) p1.nextDir = {x: -1, y: 0};
+        if ((e.key === 'd' || e.key === 'D') && p1.dir.x === 0) p1.nextDir = {x: 1, y: 0};
+
+        // P2 控制 (方向鍵)
+        if (e.key === 'ArrowUp' && p2.dir.y === 0) p2.nextDir = {x: 0, y: -1};
+        if (e.key === 'ArrowDown' && p2.dir.y === 0) p2.nextDir = {x: 0, y: 1};
+        if (e.key === 'ArrowLeft' && p2.dir.x === 0) p2.nextDir = {x: -1, y: 0};
+        if (e.key === 'ArrowRight' && p2.dir.x === 0) p2.nextDir = {x: 1, y: 0};
+
+        // 防止網頁捲動
+        if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) {
+            e.preventDefault();
+        }
+    });
+
+    /** 啟動按鈕 **/
+    startBtn.addEventListener('click', () => {
+        initAudio();
+        resetGame();
+        uiPanel.style.display = 'none';
+        isPlaying = true;
+        
+        if (!animationId) {
+            requestAnimationFrame(gameLoop);
+        }
+    });
+
+    // 初始繪製一次背景
+    draw();
+
+</script>
+</body>
+</html>
